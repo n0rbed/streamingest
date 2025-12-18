@@ -1,45 +1,23 @@
-import asyncio
-import websockets
-import binascii
-from io import BytesIO
-from PIL import Image
 from flask import Flask, Response
-from base64 import b64encode
+from receive_stream import latest_frame  # Import the memory buffer from receive_stream.py
 
+# Load a placeholder image for when no frame is available
+with open("placeholder.jpg", "rb") as f:
+    PLACEHOLDER = f.read()
 
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def index():
-    return Response(get_image(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
-def get_image():
-    while True:
-        try:
-            with open("image.jpg", "rb") as f:
-                image_bytes = f.read()
-            image = Image.open(BytesIO(image_bytes))
-            img_io = BytesIO()
-            image.save(img_io, 'JPEG')
-            img_io.seek(0)
-            img_bytes = img_io.read()
+    def gen():
+        global latest_frame
+        while True:
+            # Use latest_frame if available, else placeholder
+            frame = latest_frame if latest_frame else PLACEHOLDER
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+    return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-        except Exception as e:
-            print("encountered an exception: ")
-            print(e)
-
-            with open("placeholder.jpg", "rb") as f:
-                image_bytes = f.read()
-            image = Image.open(BytesIO(image_bytes))
-            img_io = BytesIO()
-            image.save(img_io, 'JPEG')
-            img_io.seek(0)
-            img_bytes = img_io.read()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
-            continue
-
-app.run(host='0.0.0.0', debug=False, threaded=True)
+if __name__ == "__main__":
+    # threaded=True allows multiple clients
+    app.run(host="0.0.0.0", port=5000, threaded=True)
