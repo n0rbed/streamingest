@@ -87,7 +87,7 @@ def index():
                        b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
             else:
                 # No new frame, send keepalive or sleep briefly
-                time.sleep(0.033)  # ~30fps max
+                time.sleep(0.025)  # ~40fps max
     
     return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
