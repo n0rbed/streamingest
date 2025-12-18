@@ -1,47 +1,36 @@
 import asyncio
 import websockets
-from io import BytesIO
-from PIL import Image, UnidentifiedImageError
-import os
-import tempfile
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_PATH = os.path.join(BASE_DIR, "image.jpg")
+# Global variable to store the latest image in memory
+latest_frame = None
 
 def is_valid_image(image_bytes):
-    try:
-        Image.open(BytesIO(image_bytes))
-        return True
-    except UnidentifiedImageError:
-        print("image invalid")
-        return False
+    """Optional minimal validation: check JPEG SOI marker"""
+    return image_bytes[:2] == b'\xff\xd8' and image_bytes[-2:] == b'\xff\xd9'
 
-# 🔧 FIX: new websockets API → only ONE argument
 async def handle_connection(websocket):
+    global latest_frame
     try:
         async for message in websocket:
+            # Only process binary messages
             if not isinstance(message, (bytes, bytearray)):
                 continue
 
-            print(f"received {len(message)} bytes")
-
+            # Ignore too-small frames
             if len(message) < 5000:
                 continue
 
+            # Optional minimal validation
             if not is_valid_image(message):
                 continue
 
-            # ✅ Atomic write (prevents Flask reading partial file)
-            with tempfile.NamedTemporaryFile(dir=BASE_DIR, delete=False) as tmp:
-                tmp.write(message)
-                tmp.flush()
-                os.fsync(tmp.fileno())
-                tmp_name = tmp.name
+            # Store the latest frame in memory
+            latest_frame = message
 
-            os.replace(tmp_name, IMAGE_PATH)
-
+            # Debug: print size
+            print(f"Received {len(message)} bytes")
     except websockets.exceptions.ConnectionClosed:
-        print("connection closed")
+        print("WebSocket connection closed")
 
 async def main():
     async with websockets.serve(handle_connection, "0.0.0.0", 3001):
